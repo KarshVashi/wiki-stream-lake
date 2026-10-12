@@ -1,0 +1,3 @@
+# Copy to terraform.tfvars (git-ignored) and fill in.
+aws_region  = "eu-west-2"
+alert_email = "you@example.com"
