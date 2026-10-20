@@ -3,5 +3,19 @@ locals {
   name_prefix = "${var.project}-${var.env}"
 }
 
-# Modules are added phase by phase: storage and guardrails in Phase 1,
-# streaming in Phase 3, catalog_etl in Phase 4, query in Phase 5.
+data "aws_caller_identity" "current" {}
+
+module "storage" {
+  source = "./modules/storage"
+
+  name_prefix = local.name_prefix
+  account_id  = data.aws_caller_identity.current.account_id
+}
+
+module "guardrails" {
+  source = "./modules/guardrails"
+
+  name_prefix       = local.name_prefix
+  monthly_limit_usd = var.monthly_budget_usd
+  alert_email       = var.alert_email
+}
