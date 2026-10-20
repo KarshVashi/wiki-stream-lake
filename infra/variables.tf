@@ -26,3 +26,9 @@ variable "alert_email" {
     error_message = "alert_email must be a valid email address."
   }
 }
+
+variable "monthly_budget_usd" {
+  description = "Monthly cost budget for the account, in USD."
+  type        = number
+  default     = 10
+}
