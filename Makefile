@@ -1,6 +1,16 @@
 TF ?= terraform
 TF_DIR := infra
 export AWS_PROFILE ?= wiki-lake
+export TF
+
+HOURS ?= 12
+MINUTES ?=
+KEY ?= event_id
+ARGS ?=
+GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
+
+# Read one value from terraform output, only when a recipe needs it.
+tf_out = $(shell $(TF) -chdir=$(TF_DIR) output -raw $(1))
 
 .DEFAULT_GOAL := help
 .PHONY: help setup lint test init validate plan apply destroy \
@@ -39,23 +49,31 @@ destroy: init ## Destroy everything (asks for confirmation)
 # Make treats words after the target as more targets, so options are passed as
 # variables, e.g. make capture HOURS=3 KEY=domain, or make dry-run ARGS="...".
 
-dry-run: ## Run the producer locally, printing instead of sending (Phase 2)
-	@echo "dry-run is implemented in Phase 2." && exit 1
+dry-run: ## Run the producer locally, printing instead of sending: MINUTES=1, ARGS="..."
+	PYTHONPATH=src uv run python -m producer capture --dry-run \
+		--duration-minutes $(or $(MINUTES),1) $(ARGS)
 
-image: ## Build and push the producer image to ECR (Phase 2)
-	@echo "image is implemented in Phase 2." && exit 1
+image: ## Build the producer image and push it to ECR, tagged with the git SHA and latest
+	$(eval REPO := $(call tf_out,ecr_repository_url))
+	aws ecr get-login-password --region $(call tf_out,aws_region) \
+		| docker login --username AWS --password-stdin $(firstword $(subst /, ,$(REPO)))
+	docker build --platform linux/arm64 -f src/producer/Dockerfile \
+		-t $(REPO):$(GIT_SHA) -t $(REPO):latest .
+	docker push $(REPO):$(GIT_SHA)
+	docker push $(REPO):latest
 
-capture: ## Start a capture task: HOURS=12 or MINUTES=..., KEY=event_id|domain (Phase 2)
-	@echo "capture is implemented in Phase 2." && exit 1
+capture: ## Start a capture task: HOURS=12 or MINUTES=..., KEY=event_id|domain, ARGS="--dry-run"
+	uv run python scripts/run_task.py capture --hours $(HOURS) --key $(KEY) \
+		$(if $(MINUTES),--minutes $(MINUTES)) -- $(ARGS)
 
-capture-stop: ## Stop the running capture task (Phase 2)
-	@echo "capture-stop is implemented in Phase 2." && exit 1
+capture-stop: ## Stop the running producer task (it still writes its summary)
+	uv run python scripts/run_task.py stop
 
-logs: ## Follow the producer task's logs (Phase 2)
-	@echo "logs is implemented in Phase 2." && exit 1
+logs: ## Follow the producer task's CloudWatch logs
+	aws logs tail $(call tf_out,producer_log_group) --follow --since 1h
 
-fetch-runs: ## Copy run summaries from S3 runs/ to docs/runs/ (Phase 2)
-	@echo "fetch-runs is implemented in Phase 2." && exit 1
+fetch-runs: ## Copy run summaries from S3 runs/ to docs/runs/
+	aws s3 sync s3://$(call tf_out,lake_bucket)/runs/ docs/runs/
 
 stream-down: ## Remove the stream and Firehose, keep the lake (Phase 3)
 	@echo "stream-down is implemented in Phase 3." && exit 1
