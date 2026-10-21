@@ -28,3 +28,13 @@ module "producer_task" {
   account_id      = data.aws_caller_identity.current.account_id
   lake_bucket_arn = module.storage.lake_bucket_arn
 }
+
+module "streaming" {
+  source = "./modules/streaming"
+  count  = var.enable_streaming ? 1 : 0
+
+  name_prefix             = local.name_prefix
+  lake_bucket_arn         = module.storage.lake_bucket_arn
+  firehose_buffer_seconds = var.firehose_buffer_seconds
+  lambda_source_dir       = "${path.root}/../src/transform_lambda"
+}

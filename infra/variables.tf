@@ -32,3 +32,15 @@ variable "monthly_budget_usd" {
   type        = number
   default     = 10
 }
+
+variable "enable_streaming" {
+  description = "Create the Kinesis stream, Firehose and transform Lambda. The stream bills per shard-hour, so make stream-down sets this to false between sessions. Passed by the Makefile."
+  type        = bool
+  default     = true
+}
+
+variable "firehose_buffer_seconds" {
+  description = "Longest Firehose waits before writing a file to raw/edits/."
+  type        = number
+  default     = 120
+}
