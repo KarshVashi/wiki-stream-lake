@@ -64,3 +64,13 @@ output "producer_log_group" {
   description = "CloudWatch log group for the producer."
   value       = module.producer_task.log_group_name
 }
+
+output "edits_stream_name" {
+  description = "Kinesis stream the producer writes to; null while streaming is off."
+  value       = try(module.streaming[0].stream_name, null)
+}
+
+output "firehose_name" {
+  description = "Firehose delivery stream from Kinesis to raw/edits/; null while streaming is off."
+  value       = try(module.streaming[0].firehose_name, null)
+}

@@ -3,6 +3,10 @@ TF_DIR := infra
 export AWS_PROFILE ?= wiki-lake
 export TF
 
+# Which billable streams exist is set on every plan/apply, never left in tfvars.
+STREAMING ?= true
+TF_VARS = -var enable_streaming=$(STREAMING)
+
 HOURS ?= 12
 MINUTES ?=
 KEY ?= event_id
@@ -37,11 +41,11 @@ validate: ## Validate Terraform without touching any backend
 	$(TF) -chdir=$(TF_DIR) init -backend=false -input=false >/dev/null
 	$(TF) -chdir=$(TF_DIR) validate
 
-plan: init ## Show what Terraform would change
-	$(TF) -chdir=$(TF_DIR) plan
+plan: init ## Show what Terraform would change (STREAMING=true|false)
+	$(TF) -chdir=$(TF_DIR) plan $(TF_VARS)
 
-apply: init ## Apply Terraform changes (asks for confirmation)
-	$(TF) -chdir=$(TF_DIR) apply
+apply: init ## Apply Terraform changes, asks for confirmation (STREAMING=true|false)
+	$(TF) -chdir=$(TF_DIR) apply $(TF_VARS)
 
 destroy: init ## Destroy everything (asks for confirmation)
 	$(TF) -chdir=$(TF_DIR) destroy
@@ -75,8 +79,8 @@ logs: ## Follow the producer task's CloudWatch logs
 fetch-runs: ## Copy run summaries from S3 runs/ to docs/runs/
 	aws s3 sync s3://$(call tf_out,lake_bucket)/runs/ docs/runs/
 
-stream-down: ## Remove the stream and Firehose, keep the lake (Phase 3)
-	@echo "stream-down is implemented in Phase 3." && exit 1
+stream-down: ## Remove the stream, Firehose and Lambda; keep the lake and everything else
+	$(MAKE) apply STREAMING=false
 
 run-etl: ## Start the Glue workflow (Phase 4)
 	@echo "run-etl is implemented in Phase 4." && exit 1
