@@ -22,3 +22,45 @@ output "budget_name" {
   description = "Monthly cost budget."
   value       = module.guardrails.budget_name
 }
+
+# Read by the Makefile and scripts/run_task.py.
+
+output "aws_region" {
+  description = "Region everything runs in."
+  value       = var.aws_region
+}
+
+output "ecr_repository_url" {
+  description = "Where make image pushes the producer image."
+  value       = module.producer_task.ecr_repository_url
+}
+
+output "ecs_cluster" {
+  description = "Cluster the producer task runs in."
+  value       = module.producer_task.cluster_name
+}
+
+output "producer_task_family" {
+  description = "Producer task definition family."
+  value       = module.producer_task.task_family
+}
+
+output "producer_container" {
+  description = "Container name inside the task definition."
+  value       = module.producer_task.container_name
+}
+
+output "producer_subnets" {
+  description = "Default-VPC public subnets the task runs in."
+  value       = module.producer_task.subnet_ids
+}
+
+output "producer_security_group" {
+  description = "Outbound-HTTPS-only security group for the task."
+  value       = module.producer_task.security_group_id
+}
+
+output "producer_log_group" {
+  description = "CloudWatch log group for the producer."
+  value       = module.producer_task.log_group_name
+}
