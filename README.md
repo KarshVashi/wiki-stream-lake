@@ -4,7 +4,7 @@ A streaming and batch data lake on AWS, fed by the live stream of Wikipedia edit
 
 Wikimedia's public `recentchange` stream is captured by a small Python producer running as a one-off ECS Fargate task, sent through Kinesis Data Streams and Firehose into S3, curated into partitioned Parquet with a Glue Spark job, and queried with Athena. Everything is Terraform.
 
-**Status:** producer on ECS Fargate, Kinesis and Firehose landing cleaned JSON in S3, and a Glue workflow that curates it into partitioned Parquet. Query layer to follow.
+**Status:** the full pipeline is in place, from the live stream to SQL in Athena. Experiments and findings to follow.
 
 ## Quick start
 
@@ -65,3 +65,22 @@ make backfill DATE=2026-10-21   # rebuild one day from raw, same result every ti
 ```
 
 The transform logic lives in `src/glue_jobs/transforms.py` with no Glue imports, so it is tested with local PySpark (needs Java).
+
+## Querying with Athena
+
+Queries run in the `wiki-lake-dev` Athena workgroup. Its settings are enforced, so clients cannot override them:
+
+- results go to the Athena results bucket and expire after 7 days;
+- any query that would scan more than 1 GB is cancelled;
+- bytes scanned per query are published to CloudWatch.
+
+Every file in `sql/` is registered as a saved query of the same name. A `?` in a query is a parameter that the Athena console asks for when you run it.
+
+| Query | What it answers |
+|---|---|
+| `top_wikis` | Which wikis get the most edits |
+| `bots_vs_humans` | Share of edits made by bots, per wiki |
+| `edits_per_minute` | Edit rate through one day |
+| `largest_changes` | Biggest additions and removals of text on one day |
+| `duplicate_check` | Any `event_id` stored twice (must return nothing) |
+| `benchmark_raw` / `benchmark_curated` | The same aggregation on gzip JSON and on Parquet, to compare data scanned |
