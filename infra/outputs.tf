@@ -74,3 +74,18 @@ output "firehose_name" {
   description = "Firehose delivery stream from Kinesis to raw/edits/; null while streaming is off."
   value       = try(module.streaming[0].firehose_name, null)
 }
+
+output "glue_database" {
+  description = "Glue Data Catalog database holding raw_edits and curated_edits."
+  value       = module.catalog_etl.database_name
+}
+
+output "glue_workflow" {
+  description = "Workflow that make run-etl starts: crawler, then the curate job."
+  value       = module.catalog_etl.workflow_name
+}
+
+output "glue_job" {
+  description = "Spark job that builds curated_edits."
+  value       = module.catalog_etl.job_name
+}
