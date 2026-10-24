@@ -36,9 +36,12 @@ log = glue.get_logger()
 
 
 def read_raw(**options):
-    return glue.create_dynamic_frame.from_catalog(
-        database=args["database"], table_name=args["raw_table"], **options
-    ).toDF()
+    catalog = {"database": args["database"], "table_name": args["raw_table"]}
+    raw = glue.create_dynamic_frame.from_catalog(**catalog, **options)
+    # A DynamicFrame keeps a column whose values vary in type (e.g. int in some rows,
+    # long in others) as a "choice", which becomes a struct in a DataFrame. Resolve
+    # every such column to the type the crawler recorded in the catalog.
+    return raw.resolveChoice(choice="match_catalog", **catalog).toDF()
 
 
 if backfill_date:
