@@ -89,3 +89,13 @@ output "glue_job" {
   description = "Spark job that builds curated_edits."
   value       = module.catalog_etl.job_name
 }
+
+output "athena_workgroup" {
+  description = "Workgroup to run queries in: 1 GB scan limit, results in the results bucket."
+  value       = module.query.workgroup_name
+}
+
+output "saved_queries" {
+  description = "Athena saved queries, one per file in sql/."
+  value       = module.query.saved_queries
+}

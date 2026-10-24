@@ -50,3 +50,12 @@ module "catalog_etl" {
   scripts_dir           = "${path.root}/../src/glue_jobs"
   etl_schedule          = var.etl_schedule
 }
+
+module "query" {
+  source = "./modules/query"
+
+  name_prefix         = local.name_prefix
+  database_name       = module.catalog_etl.database_name
+  results_bucket_name = module.storage.athena_results_bucket_name
+  sql_dir             = "${path.root}/../sql"
+}
