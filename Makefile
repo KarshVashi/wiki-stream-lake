@@ -18,7 +18,7 @@ tf_out = $(shell $(TF) -chdir=$(TF_DIR) output -raw $(1))
 
 .DEFAULT_GOAL := help
 .PHONY: help setup lint test init validate plan apply destroy \
-	image capture capture-stop logs replay dry-run fetch-runs run-etl stream-down
+	image capture capture-stop logs replay dry-run fetch-runs run-etl backfill stream-down
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
@@ -82,8 +82,15 @@ fetch-runs: ## Copy run summaries from S3 runs/ to docs/runs/
 stream-down: ## Remove the stream, Firehose and Lambda; keep the lake and everything else
 	$(MAKE) apply STREAMING=false
 
-run-etl: ## Start the Glue workflow (Phase 4)
-	@echo "run-etl is implemented in Phase 4." && exit 1
+run-etl: ## Start the Glue workflow: crawl raw_edits, then rebuild touched curated partitions
+	aws glue start-workflow-run --name $(call tf_out,glue_workflow)
+	@echo "Watch it in the Glue console: ETL > Workflows > $(call tf_out,glue_workflow) > History"
+
+backfill: ## Rebuild one event_date partition from raw, ignoring bookmarks: DATE=YYYY-MM-DD
+	@test -n "$(DATE)" || (echo "Usage: make backfill DATE=YYYY-MM-DD" && exit 1)
+	aws glue start-job-run --job-name $(call tf_out,glue_job) --arguments \
+		'{"--backfill_date":"$(DATE)","--job-bookmark-option":"job-bookmark-disable"}'
+
 
 replay: ## Start a replay task: SOURCE=raw/edits/..., RATE=2500, KEY=domain (Phase 6)
 	@echo "replay is implemented in Phase 6." && exit 1

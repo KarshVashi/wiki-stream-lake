@@ -4,7 +4,7 @@ A streaming and batch data lake on AWS, fed by the live stream of Wikipedia edit
 
 Wikimedia's public `recentchange` stream is captured by a small Python producer running as a one-off ECS Fargate task, sent through Kinesis Data Streams and Firehose into S3, curated into partitioned Parquet with a Glue Spark job, and queried with Athena. Everything is Terraform.
 
-**Status:** producer on ECS Fargate, Kinesis Data Stream, and Firehose with a transform Lambda landing cleaned JSON in S3. ETL and query layers to follow.
+**Status:** producer on ECS Fargate, Kinesis and Firehose landing cleaned JSON in S3, and a Glue workflow that curates it into partitioned Parquet. Query layer to follow.
 
 ## Quick start
 
@@ -50,3 +50,18 @@ The stream bills per shard-hour even when idle, so remove it between sessions; t
 make stream-down              # same as: make apply STREAMING=false
 make apply                    # brings it back
 ```
+
+## Curating with Glue
+
+`make run-etl` starts a Glue workflow:
+
+1. A **crawler** reads `raw/edits/` and registers the table `raw_edits` (partitions `year/month/day/hour`, by arrival time) in the Glue Data Catalog.
+2. When the crawl succeeds, a **Spark job** (`src/glue_jobs/curate_edits.py`, 2 G.1X workers) finds the raw files that are new since its last run, using job bookmarks, works out which event dates they contain, and rebuilds each of those `event_date` partitions from raw: typed columns, `size_delta`, duplicates removed, written as Snappy Parquet.
+
+The result is `curated_edits`, a table defined in Terraform with partition projection, so Athena knows its partitions without a crawler. Because each run overwrites whole partitions, re-running it is safe:
+
+```sh
+make backfill DATE=2026-10-21   # rebuild one day from raw, same result every time
+```
+
+The transform logic lives in `src/glue_jobs/transforms.py` with no Glue imports, so it is tested with local PySpark (needs Java).

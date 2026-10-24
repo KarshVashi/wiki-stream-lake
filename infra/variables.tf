@@ -44,3 +44,9 @@ variable "firehose_buffer_seconds" {
   type        = number
   default     = 120
 }
+
+variable "etl_schedule" {
+  description = "Cron expression to run the Glue workflow on a schedule, e.g. cron(0 6 * * ? *). Null (the default) means on demand only."
+  type        = string
+  default     = null
+}

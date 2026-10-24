@@ -38,3 +38,15 @@ module "streaming" {
   firehose_buffer_seconds = var.firehose_buffer_seconds
   lambda_source_dir       = "${path.root}/../src/transform_lambda"
 }
+
+module "catalog_etl" {
+  source = "./modules/catalog_etl"
+
+  name_prefix           = local.name_prefix
+  lake_bucket_name      = module.storage.lake_bucket_name
+  lake_bucket_arn       = module.storage.lake_bucket_arn
+  artifacts_bucket_name = module.storage.artifacts_bucket_name
+  artifacts_bucket_arn  = module.storage.artifacts_bucket_arn
+  scripts_dir           = "${path.root}/../src/glue_jobs"
+  etl_schedule          = var.etl_schedule
+}
