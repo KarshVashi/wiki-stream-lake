@@ -59,3 +59,10 @@ module "query" {
   results_bucket_name = module.storage.athena_results_bucket_name
   sql_dir             = "${path.root}/../sql"
 }
+
+module "replay_stream" {
+  source = "./modules/replay_stream"
+  count  = var.enable_replay_stream ? 1 : 0
+
+  name_prefix = local.name_prefix
+}

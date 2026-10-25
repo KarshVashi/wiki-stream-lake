@@ -99,3 +99,8 @@ output "saved_queries" {
   description = "Athena saved queries, one per file in sql/."
   value       = module.query.saved_queries
 }
+
+output "replay_stream_name" {
+  description = "Experiment 1 replay stream; null unless REPLAY=true."
+  value       = try(module.replay_stream[0].stream_name, null)
+}

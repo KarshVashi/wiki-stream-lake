@@ -50,3 +50,9 @@ variable "etl_schedule" {
   type        = string
   default     = null
 }
+
+variable "enable_replay_stream" {
+  description = "Create the 4-shard replay stream for Experiment 1. Off by default; passed by the Makefile."
+  type        = bool
+  default     = false
+}
