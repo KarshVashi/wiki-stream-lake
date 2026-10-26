@@ -1,0 +1,77 @@
+{
+  "event_date": "2026-10-24",
+  "results": {
+    "raw JSON, one day": {
+      "bytes_scanned": 43083918,
+      "median_engine_ms": 1253,
+      "runs": [
+        {
+          "query_id": "a17a6047-a541-4d24-bfc4-fcda195f1ef0",
+          "bytes_scanned": 43083918,
+          "engine_ms": 1253,
+          "total_ms": 1429
+        },
+        {
+          "query_id": "7c848996-0e33-4197-bb0e-15450167cabd",
+          "bytes_scanned": 43083918,
+          "engine_ms": 1022,
+          "total_ms": 1482
+        },
+        {
+          "query_id": "90cedddb-28ec-44b4-a2c7-78edba4e4a89",
+          "bytes_scanned": 43083918,
+          "engine_ms": 1353,
+          "total_ms": 1482
+        }
+      ]
+    },
+    "curated Parquet, one day": {
+      "bytes_scanned": 1140553,
+      "median_engine_ms": 697,
+      "runs": [
+        {
+          "query_id": "0be86442-681a-4034-b851-f3663b8efd2f",
+          "bytes_scanned": 1140553,
+          "engine_ms": 697,
+          "total_ms": 816
+        },
+        {
+          "query_id": "b3d46dcc-033c-48c7-8cc1-67a509d4851b",
+          "bytes_scanned": 1140553,
+          "engine_ms": 819,
+          "total_ms": 948
+        },
+        {
+          "query_id": "90e1269b-6e59-41f4-8644-4062215bc3d0",
+          "bytes_scanned": 1140553,
+          "engine_ms": 511,
+          "total_ms": 629
+        }
+      ]
+    },
+    "curated Parquet, all days": {
+      "bytes_scanned": 2193327,
+      "median_engine_ms": 813,
+      "runs": [
+        {
+          "query_id": "2654ec4e-a8cb-4eec-87dd-16b1c7329a38",
+          "bytes_scanned": 2193327,
+          "engine_ms": 1049,
+          "total_ms": 1169
+        },
+        {
+          "query_id": "2068a3bd-eaf0-4c02-ac95-2dd9a74a1a12",
+          "bytes_scanned": 2193327,
+          "engine_ms": 813,
+          "total_ms": 955
+        },
+        {
+          "query_id": "ffda2ac2-ead7-4cd5-9fcb-2e1b1fbf3805",
+          "bytes_scanned": 2193327,
+          "engine_ms": 704,
+          "total_ms": 819
+        }
+      ]
+    }
+  }
+}

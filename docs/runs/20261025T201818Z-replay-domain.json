@@ -1,0 +1,28 @@
+{
+  "mode": "replay",
+  "partition_key": "domain",
+  "stream_name": "wiki-lake-dev-replay",
+  "dry_run": false,
+  "started_at": "2026-10-25T20:18:18.322546+00:00",
+  "ended_at": "2026-10-25T20:25:03.964765+00:00",
+  "first_put_at": "2026-10-25T20:18:18.890181+00:00",
+  "duration_seconds": 405.6,
+  "records_read": 847307,
+  "records_sent": 847307,
+  "records_failed": 0,
+  "throttled": 158929,
+  "retries": 158929,
+  "sent_per_second": 2088.8,
+  "records_per_shard": {
+    "shardId-000000000000": 104639,
+    "shardId-000000000001": 36226,
+    "shardId-000000000002": 282187,
+    "shardId-000000000003": 424255
+  },
+  "percent_per_shard": {
+    "shardId-000000000000": 12.3,
+    "shardId-000000000001": 4.3,
+    "shardId-000000000002": 33.3,
+    "shardId-000000000003": 50.1
+  }
+}
