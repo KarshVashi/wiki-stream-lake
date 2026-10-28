@@ -73,3 +73,15 @@ def test_stream_events_reconnects_and_resumes_from_last_event_id():
 def test_stream_events_skips_invalid_json():
     session = FakeSession([FakeResponse(["data: not json", "", 'data: {"ok": true}', ""])])
     assert next(stream_events("ua", session=session, sleep=lambda s: None)) == {"ok": True}
+
+
+def test_stream_events_stops_when_told_even_if_the_server_is_down():
+    session = FakeSession([FakeResponse(error=requests.ConnectionError("503"))] * 10)
+    checks = iter([True, True, True, False])  # time runs out on the fourth check
+    sleeps = []
+    events = stream_events(
+        "ua", session=session, sleep=sleeps.append, keep_going=lambda: next(checks)
+    )
+    assert list(events) == []  # ends instead of retrying forever
+    assert len(session.headers_seen) == 2
+    assert sleeps == [1]

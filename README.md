@@ -2,85 +2,75 @@
 
 A streaming and batch data lake on AWS, fed by the live stream of Wikipedia edits.
 
-Wikimedia's public `recentchange` stream is captured by a small Python producer running as a one-off ECS Fargate task, sent through Kinesis Data Streams and Firehose into S3, curated into partitioned Parquet with a Glue Spark job, and queried with Athena. Everything is Terraform.
+Wikimedia publishes every edit to every Wikipedia, Wikidata and Commons page as a public stream. This project captures it with a Python producer on ECS Fargate, moves it through Kinesis Data Streams and Firehose into S3, curates it into partitioned Parquet with a Glue Spark job, and queries it with Athena. Everything is Terraform, and four experiments measure the trade-offs.
 
-**Status:** the full pipeline is in place, from the live stream to SQL in Athena. Experiments and findings to follow.
-
-## Quick start
-
-Needs Terraform 1.6 or later, AWS CLI v2, and `uv` (which installs Python 3.12 for you).
-
-```sh
-make setup   # install Python and dev dependencies
-make lint    # ruff, terraform fmt, terraform validate
-make test    # pytest
+```mermaid
+flowchart LR
+    W[Wikimedia<br/>EventStreams] --> P[Producer<br/>Fargate task]
+    P --> K[Kinesis<br/>2 shards]
+    K --> F[Firehose +<br/>Lambda transform]
+    F --> R[(S3 raw/<br/>gzip JSON)]
+    R --> G[Glue crawler<br/>+ Spark job]
+    G --> C[(S3 curated/<br/>Parquet)]
+    C --> A[Athena]
+    R --> A
 ```
 
-To deploy, copy `infra/terraform.tfvars.example` to `infra/terraform.tfvars`, fill in the alert email, and use an AWS CLI profile named `wiki-lake` (or set `AWS_PROFILE`):
+## Findings
+
+Measured results, with how each was measured, are in [docs/findings.md](docs/findings.md).
+
+| Experiment | Question | Result |
+|---|---|---|
+| Hot shard | What does a skewed partition key do to Kinesis shards? | Keyed by wiki, one of 4 shards got 50% of records and another 4%. Replayed at 2,500 records/s, Kinesis rejected writes 158,929 times and throughput fell 16%. Keyed by event ID: 25% per shard, no throttling. |
+| JSON vs Parquet | How much less does Athena scan on partitioned Parquet? | 38× less for the same query (43.1 MB → 1.14 MB); dropping the date filter doubles the Parquet scan. |
+| Replay | Does re-running the curate job create duplicates? | No: 430,963 rows before and after two backfills, 0 duplicates. Reconciling counts also exposed a midnight edge case, now fixed. |
+| Freshness | What does the Firehose buffer cost in delay, and in file count? | The first file lands after almost exactly the buffer limit: 67 s at 60 s, 121 s at 120 s, 301 s at 300 s. Going from 300 s to 60 s gave 4.5× more files, each a quarter of the size. |
+
+Data: a 12-hour capture of 1.67 million events (847,303 rows after cleaning), 24–25 October 2026.
+
+## How it works
+
+1. **Producer** (`src/producer/`): reads the Server-Sent Events stream, reconnecting and resuming from the last event ID; batches records into `PutRecords` calls, retrying only the records that fail; counts records per shard. It runs as a one-off Fargate task that stops itself when its time is up and writes a run summary to S3.
+2. **Stream and delivery**: a 2-shard Kinesis Data Stream feeds Firehose, which writes gzip JSON to `raw/edits/`, partitioned by arrival hour.
+3. **Transform Lambda** (`src/transform_lambda/`): drops canary and categorisation events, flattens each event to 16 fields, and replaces IP addresses and temporary-account names with `anonymous`, including inside titles and comments.
+4. **Catalog and ETL** (`src/glue_jobs/`): a Glue workflow runs a crawler that registers `raw_edits`, then a Spark job that rebuilds each affected day of `curated_edits` as typed, deduplicated Snappy Parquet, partitioned by the date of the edit. Every run overwrites whole days, so re-running is safe.
+5. **Query**: an Athena workgroup with a 1 GB scan limit per query, and saved queries from [`sql/`](sql/).
+
+Design decisions and trade-offs: [docs/architecture.md](docs/architecture.md).
+
+## Running it
+
+Needs an AWS account, Terraform 1.6 or later, AWS CLI v2, Docker, and `uv` (which installs Python 3.12). The Spark tests also need Java.
 
 ```sh
-make plan    # review the changes
-make apply   # asks for confirmation
+make setup && make lint && make test
+
+cp infra/terraform.tfvars.example infra/terraform.tfvars   # add the alert email
+make apply        # everything, including the stream
+make image        # build and push the producer image
+make capture      # 12-hour capture on Fargate
+# ...when the task has stopped:
+make stream-down  # stop the stream's hourly charge
+make run-etl      # crawl, then curate
 ```
 
-Run `make help` to list every target.
+The full routine, the experiments and fixes for common errors are in [docs/runbook.md](docs/runbook.md). `make help` lists every command.
 
-## The producer
+## Cost
 
-`src/producer/` reads the live stream (Server-Sent Events), batches events into Kinesis `PutRecords` calls, retries only the records that fail, and counts records per shard. It runs as a Fargate task that stops itself when its duration ends and writes a run summary to `s3://<lake bucket>/runs/`.
+A 12-hour capture session, including the ETL, costs about $1. Only the Kinesis streams bill while idle, so they exist only during capture sessions. Everything else bills per use, and a $10 monthly budget sends alerts at 50, 80 and 100%.
 
-```sh
-make dry-run MINUTES=1                    # locally: print live events, send nothing
-make image                                # build the container and push it to ECR
-make capture MINUTES=2 ARGS="--dry-run"   # same dry run, on Fargate
-make logs                                 # follow the task's logs
+## Repo layout
+
+```text
+infra/          Terraform: root module and storage, producer_task, streaming,
+                replay_stream, catalog_etl, query and guardrails modules
+src/producer/   SSE client, Kinesis writer, replay mode, Dockerfile
+src/transform_lambda/   Firehose transformation function
+src/glue_jobs/  curate_edits.py and its testable transforms
+sql/            Athena saved queries
+scripts/        helpers behind the make targets (tasks, benchmarks, freshness)
+tests/          pytest, including local PySpark tests
+docs/           architecture, runbook, findings, run summaries, benchmarks
 ```
-
-## Streaming into the lake
-
-The producer writes to a 2-shard Kinesis Data Stream. Firehose reads the stream, passes each batch through a Lambda (`src/transform_lambda/`), and writes gzip JSON lines to `raw/edits/year=/month=/day=/hour=/`, partitioned by the hour each record **arrived**. The Lambda:
-
-- drops canary events and every type except `edit`, `new` and `log`;
-- flattens each event to 16 fixed fields;
-- replaces temporary-account names and IP addresses with `anonymous`, in the user field and inside titles and comments.
-
-The stream bills per shard-hour even when idle, so remove it between sessions; the lake and everything else stay in place:
-
-```sh
-make stream-down              # same as: make apply STREAMING=false
-make apply                    # brings it back
-```
-
-## Curating with Glue
-
-`make run-etl` starts a Glue workflow:
-
-1. A **crawler** reads `raw/edits/` and registers the table `raw_edits` (partitions `year/month/day/hour`, by arrival time) in the Glue Data Catalog.
-2. When the crawl succeeds, a **Spark job** (`src/glue_jobs/curate_edits.py`, 2 G.1X workers) finds the raw files that are new since its last run, using job bookmarks, works out which event dates they contain, and rebuilds each of those `event_date` partitions from raw: typed columns, `size_delta`, duplicates removed, written as Snappy Parquet.
-
-The result is `curated_edits`, a table defined in Terraform with partition projection, so Athena knows its partitions without a crawler. Because each run overwrites whole partitions, re-running it is safe:
-
-```sh
-make backfill DATE=2026-10-21   # rebuild one day from raw, same result every time
-```
-
-The transform logic lives in `src/glue_jobs/transforms.py` with no Glue imports, so it is tested with local PySpark (needs Java).
-
-## Querying with Athena
-
-Queries run in the `wiki-lake-dev` Athena workgroup. Its settings are enforced, so clients cannot override them:
-
-- results go to the Athena results bucket and expire after 7 days;
-- any query that would scan more than 1 GB is cancelled;
-- bytes scanned per query are published to CloudWatch.
-
-Every file in `sql/` is registered as a saved query of the same name. A `?` in a query is a parameter that the Athena console asks for when you run it.
-
-| Query | What it answers |
-|---|---|
-| `top_wikis` | Which wikis get the most edits |
-| `bots_vs_humans` | Share of edits made by bots, per wiki |
-| `edits_per_minute` | Edit rate through one day |
-| `largest_changes` | Biggest additions and removals of text on one day |
-| `duplicate_check` | Any `event_id` stored twice (must return nothing) |
-| `benchmark_raw` / `benchmark_curated` | The same aggregation on gzip JSON and on Parquet, to compare data scanned |

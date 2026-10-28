@@ -1,4 +1,5 @@
-"""Start or stop the producer's Fargate task. Called by make capture and make capture-stop.
+"""Start or stop the producer's Fargate task. Called by make capture, make replay and
+make capture-stop.
 
 Cluster, subnets, security group and bucket names come from `terraform output`,
 so nothing here is hard-coded to one account.
@@ -11,6 +12,9 @@ import subprocess
 import sys
 
 import boto3
+
+# Fargate CPU units -> memory in MB. Each pair is a valid Fargate size.
+TASK_SIZES = {256: 512, 512: 1024, 1024: 2048, 2048: 4096}
 
 
 def terraform_outputs() -> dict:
@@ -34,6 +38,42 @@ def producer_command(
     return command + extra
 
 
+def replay_source(bucket: str, prefix: str) -> str:
+    """s3:// URI for a replay source. The task role may only read raw/edits/."""
+    if not prefix.startswith("raw/edits/"):
+        sys.exit(f"SOURCE must be a prefix under raw/edits/, got {prefix!r}")
+    return f"s3://{bucket}/{prefix}"
+
+
+def start_task(out: dict, command: list[str], started_by: str, cpu: int | None = None) -> None:
+    overrides = {"containerOverrides": [{"name": out["producer_container"], "command": command}]}
+    if cpu:
+        # A bigger task for this run only; the task definition stays at 0.25 vCPU.
+        overrides.update(cpu=str(cpu), memory=str(TASK_SIZES[cpu]))
+
+    ecs = boto3.client("ecs", region_name=out["aws_region"])
+    response = ecs.run_task(
+        cluster=out["ecs_cluster"],
+        taskDefinition=out["producer_task_family"],
+        launchType="FARGATE",
+        count=1,
+        startedBy=started_by,
+        networkConfiguration={
+            "awsvpcConfiguration": {
+                "subnets": out["producer_subnets"],
+                "securityGroups": [out["producer_security_group"]],
+                "assignPublicIp": "ENABLED",
+            }
+        },
+        overrides=overrides,
+    )
+    if response["failures"]:
+        sys.exit(f"run-task failed: {response['failures']}")
+    print(f"Started {response['tasks'][0]['taskArn']}")
+    print(f"Command: {' '.join(command)}")
+    print("Follow it with: make logs")
+
+
 def capture(args: argparse.Namespace, out: dict) -> int:
     minutes = args.minutes or args.hours * 60
     dry_run = "--dry-run" in args.extra
@@ -42,27 +82,18 @@ def capture(args: argparse.Namespace, out: dict) -> int:
         sys.exit("No edits stream exists (streaming is off). Run make apply first.")
 
     command = producer_command("capture", minutes, args.key, stream, out["lake_bucket"], args.extra)
-    ecs = boto3.client("ecs", region_name=out["aws_region"])
-    response = ecs.run_task(
-        cluster=out["ecs_cluster"],
-        taskDefinition=out["producer_task_family"],
-        launchType="FARGATE",
-        count=1,
-        startedBy="make-capture",
-        networkConfiguration={
-            "awsvpcConfiguration": {
-                "subnets": out["producer_subnets"],
-                "securityGroups": [out["producer_security_group"]],
-                "assignPublicIp": "ENABLED",
-            }
-        },
-        overrides={"containerOverrides": [{"name": out["producer_container"], "command": command}]},
-    )
-    if response["failures"]:
-        sys.exit(f"run-task failed: {response['failures']}")
-    print(f"Started {response['tasks'][0]['taskArn']}")
-    print(f"Runs for {minutes} minutes: {' '.join(command)}")
-    print("Follow it with: make logs")
+    start_task(out, command, "make-capture", args.cpu)
+    return 0
+
+
+def replay(args: argparse.Namespace, out: dict) -> int:
+    stream = out.get("replay_stream_name")
+    if not stream:
+        sys.exit("No replay stream exists. Run make apply REPLAY=true first.")
+
+    extra = ["--source", replay_source(out["lake_bucket"], args.source), "--rate", str(args.rate)]
+    command = producer_command("replay", args.minutes, args.key, stream, out["lake_bucket"], extra)
+    start_task(out, command, "make-replay", args.cpu)
     return 0
 
 
@@ -87,8 +118,17 @@ def main() -> int:
     start.add_argument("--hours", type=int, default=12)
     start.add_argument("--minutes", type=int, help="overrides --hours")
     start.add_argument("--key", choices=["event_id", "domain"], default="event_id")
+    start.add_argument("--cpu", type=int, choices=TASK_SIZES, help="override task CPU units")
     start.add_argument("extra", nargs="*", help="extra producer flags, after --")
     start.set_defaults(handler=capture)
+
+    resend = commands.add_parser("replay", help="resend raw/ data into the replay stream")
+    resend.add_argument("--source", required=True, help="prefix under raw/edits/")
+    resend.add_argument("--rate", type=int, default=2500, help="records per second")
+    resend.add_argument("--minutes", type=int, default=10)
+    resend.add_argument("--key", choices=["event_id", "domain"], default="domain")
+    resend.add_argument("--cpu", type=int, choices=TASK_SIZES, help="override task CPU units")
+    resend.set_defaults(handler=replay)
 
     commands.add_parser("stop", help="stop running producer tasks").set_defaults(handler=stop)
 

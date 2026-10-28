@@ -35,13 +35,15 @@ CURATED_COLUMNS = [*COLUMN_TYPES, "size_delta", "event_date"]
 def raw_partition_predicate(event_dates: Iterable[str]) -> str:
     """Glue push-down predicate for the raw partitions that can hold these event dates.
 
-    raw/ is partitioned by arrival time. An edit made on day D arrives on day D, or on
-    D+1 if it happened just before midnight, so both days are read.
+    raw/ is partitioned by the time Firehose STARTED each file's buffer, not by each
+    record's own arrival. A buffer opened at 23:59 on D-1 keeps filling past midnight, so
+    edits from early on day D can be filed under D-1; edits from late on D arrive on D+1.
+    All three days are read and the rows are then filtered to D.
     """
     days = set()
     for event_date in event_dates:
         day = date.fromisoformat(event_date)
-        days.update([day, day + timedelta(days=1)])
+        days.update(day + timedelta(days=offset) for offset in (-1, 0, 1))
     return " OR ".join(f"(year='{d:%Y}' AND month='{d:%m}' AND day='{d:%d}')" for d in sorted(days))
 
 

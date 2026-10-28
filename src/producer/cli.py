@@ -89,9 +89,15 @@ def main(argv=None) -> int:
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
     stats = RunStats(args.mode, args.partition_key, args.stream_name, args.dry_run)
+    deadline = time.monotonic() + args.duration_minutes * 60
+
+    def keep_going() -> bool:
+        return time.monotonic() < deadline and not stop.is_set()
+
     if args.mode == "capture":
         user_agent = f"{USER_AGENT} {args.contact}" if args.contact else USER_AGENT
-        records = to_records(stream_events(user_agent), args.partition_key)
+        events = stream_events(user_agent, keep_going=keep_going)
+        records = to_records(events, args.partition_key)
     else:
         bucket, prefix = split_s3_uri(args.source)
         events = read_s3_events(boto3.client("s3"), bucket, prefix)
@@ -111,7 +117,7 @@ def main(argv=None) -> int:
         " (dry run)" if args.dry_run else "",
     )
     try:
-        run(records, sink, stats, time.monotonic() + args.duration_minutes * 60, stop)
+        run(records, sink, stats, deadline, stop)
     finally:
         stats.finish()
         summary = stats.summary()
