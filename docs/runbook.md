@@ -48,14 +48,14 @@ Backfill ignores job bookmarks and overwrites only that day's partition, so it i
 ## Replay (Experiment 1, part B)
 
 ```sh
-make apply REPLAY=true                      # adds the 4-shard replay stream
-make replay SOURCE=raw/edits/year=2026/month=10/day=24/ KEY=domain RATE=2500
-make replay SOURCE=raw/edits/year=2026/month=10/day=24/ KEY=event_id RATE=2500
+make apply REPLAY=true STREAMING=false      # adds the 4-shard replay stream only
+make replay SOURCE=raw/edits/year=2026/month=10/ KEY=domain RATE=2500 CPU=512
+make replay SOURCE=raw/edits/year=2026/month=10/ KEY=event_id RATE=2500 CPU=512
 make fetch-runs
 make apply REPLAY=false STREAMING=false     # remove it straight away
 ```
 
-Each replay runs for 10 minutes by default (`MINUTES=`). Run them one after the other, not at the same time. If the summary shows an achieved rate well under `RATE`, give the task more CPU for that run only: `CPU=512` or `CPU=1024`.
+Each replay runs until the source data runs out or for 10 minutes (`MINUTES=`), whichever comes first; a whole month of data gives a run of several minutes. Run them one after the other, not at the same time. If the summary shows an achieved rate well under `RATE`, give the task more CPU for that run only: `CPU=512` or `CPU=1024`.
 
 ## Benchmarks and checks
 
@@ -84,3 +84,4 @@ Check the Billing console the next day.
 | `run-task` mentions a service-linked role | First ECS use in the account: `aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com`, then retry. |
 | Curate job: `cannot cast "STRUCT<int, long>"` | A column with mixed number types. The job resolves these against the catalog (`resolveChoice`); if a new column does this, check its type in `raw_edits`. |
 | Athena: `Column '2026' cannot be resolved` or `varchar = integer` | Parameter typed without single quotes. Enter `'2026'`, not `2026` or `"2026"`. |
+| Producer logs `502`/`503` from `stream.wikimedia.org` and sends nothing | Wikimedia's stream is down. The producer keeps reconnecting with backoff and still stops at its deadline. Check with `make dry-run`; if events scroll past, it is back. Take the stream down while waiting. |

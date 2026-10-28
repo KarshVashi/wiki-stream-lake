@@ -37,7 +37,7 @@ The Firehose transform Lambda drops canary events and categorisation events, fla
 
 ### Two zones, partitioned by different clocks
 
-`raw/edits/` is partitioned by **arrival hour**, the only time Firehose knows. `curated/edits/` is partitioned by **event date**, the time queries ask about. An edit made at 23:59:58 can arrive at 00:00:03, so rebuilding one event date reads two days of raw. Curated data is not also partitioned by wiki: that would split each day into hundreds of tiny files.
+`raw/edits/` is partitioned by **arrival hour**, the only time Firehose knows. `curated/edits/` is partitioned by **event date**, the time queries ask about. The two do not line up at midnight, in both directions. An edit made at 23:59:58 can arrive at 00:00:03 and be filed under the next day. And Firehose names a file's partition by the time its buffer *started*, so a buffer opened at 23:59 that keeps filling until 00:01 files early edits from the new day under the previous one (1,209 edits on 24–25 October 2026). Rebuilding one event date therefore reads three days of raw (D-1, D, D+1) and keeps only the rows for D. Curated data is not also partitioned by wiki: that would split each day into hundreds of tiny files.
 
 ### Raw table crawled, curated table defined in code
 

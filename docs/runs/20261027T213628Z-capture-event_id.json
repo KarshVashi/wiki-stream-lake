@@ -1,0 +1,24 @@
+{
+  "mode": "capture",
+  "partition_key": "event_id",
+  "stream_name": "wiki-lake-dev-edits",
+  "dry_run": false,
+  "started_at": "2026-10-27T21:36:28.839957+00:00",
+  "ended_at": "2026-10-27T21:51:28.889589+00:00",
+  "first_put_at": "2026-10-27T21:36:31.046566+00:00",
+  "duration_seconds": 900.0,
+  "records_read": 28465,
+  "records_sent": 28465,
+  "records_failed": 0,
+  "throttled": 0,
+  "retries": 0,
+  "sent_per_second": 31.6,
+  "records_per_shard": {
+    "shardId-000000000000": 14327,
+    "shardId-000000000001": 14138
+  },
+  "percent_per_shard": {
+    "shardId-000000000000": 50.3,
+    "shardId-000000000001": 49.7
+  }
+}

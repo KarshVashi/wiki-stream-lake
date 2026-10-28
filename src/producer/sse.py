@@ -36,16 +36,24 @@ def parse_sse(lines: Iterable[str]) -> Iterator[tuple[str | None, str]]:
             event_id = value
 
 
-def stream_events(user_agent: str, url: str = STREAM_URL, session=None, sleep=time.sleep):
-    """Yield events from the stream forever.
+def stream_events(
+    user_agent: str,
+    url: str = STREAM_URL,
+    session=None,
+    sleep=time.sleep,
+    keep_going=lambda: True,
+):
+    """Yield events from the stream until keep_going() returns False.
 
     On any connection problem, wait and reconnect, sending the last event ID seen so
     the server resumes where it left off instead of skipping or repeating events.
+    keep_going is checked before every reconnect, so a run still ends on time when
+    the server is down and no events arrive.
     """
     session = session or requests.Session()
     last_event_id = None
     backoff = 1
-    while True:
+    while keep_going():
         headers = {"User-Agent": user_agent, "Accept": "text/event-stream"}
         if last_event_id:
             headers["Last-Event-ID"] = last_event_id
@@ -66,5 +74,7 @@ def stream_events(user_agent: str, url: str = STREAM_URL, session=None, sleep=ti
             log.warning("stream closed by server, reconnecting in %ss", backoff)
         except requests.RequestException as exc:
             log.warning("stream error (%s), reconnecting in %ss", exc, backoff)
+        if not keep_going():
+            break
         sleep(backoff)
         backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)

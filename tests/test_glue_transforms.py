@@ -5,15 +5,19 @@ import pytest
 from transforms import CURATED_COLUMNS, curate, event_dates_in, raw_partition_predicate
 
 
-def test_predicate_reads_the_event_day_and_the_day_after():
+def test_predicate_reads_the_day_before_the_day_and_the_day_after():
+    # The day before matters: a Firehose buffer opened just before midnight is filed
+    # under that day but holds edits from after midnight (seen on 24-25 Oct 2026).
     assert raw_partition_predicate(["2026-10-31"]) == (
-        "(year='2026' AND month='10' AND day='31') OR (year='2026' AND month='11' AND day='01')"
+        "(year='2026' AND month='10' AND day='30') OR "
+        "(year='2026' AND month='10' AND day='31') OR "
+        "(year='2026' AND month='11' AND day='01')"
     )
 
 
 def test_predicate_merges_overlapping_days():
     predicate = raw_partition_predicate(["2026-10-21", "2026-10-20"])
-    assert predicate.count("day=") == 3  # 20, 21, 22
+    assert predicate.count("day=") == 4  # 19, 20, 21, 22
 
 
 def test_predicate_rejects_a_bad_date():

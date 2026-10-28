@@ -22,10 +22,12 @@ Measured results, with how each was measured, are in [docs/findings.md](docs/fin
 
 | Experiment | Question | Result |
 |---|---|---|
-| Hot shard | What does a skewed partition key do to Kinesis shards? | pending |
-| JSON vs Parquet | How much less does Athena scan on partitioned Parquet? | pending |
-| Replay | Does re-running the curate job create duplicates? | pending |
-| Freshness | What does the Firehose buffer cost in delay, and save in file count? | pending |
+| Hot shard | What does a skewed partition key do to Kinesis shards? | Keyed by wiki, one of 4 shards got 50% of records and another 4%. Replayed at 2,500 records/s, Kinesis rejected writes 158,929 times and throughput fell 16%. Keyed by event ID: 25% per shard, no throttling. |
+| JSON vs Parquet | How much less does Athena scan on partitioned Parquet? | 38× less for the same query (43.1 MB → 1.14 MB); dropping the date filter doubles the Parquet scan. |
+| Replay | Does re-running the curate job create duplicates? | No: 430,963 rows before and after two backfills, 0 duplicates. Reconciling counts also exposed a midnight edge case, now fixed. |
+| Freshness | What does the Firehose buffer cost in delay, and in file count? | The first file lands after almost exactly the buffer limit: 67 s at 60 s, 121 s at 120 s, 301 s at 300 s. Going from 300 s to 60 s gave 4.5× more files, each a quarter of the size. |
+
+Data: a 12-hour capture of 1.67 million events (847,303 rows after cleaning), 24–25 October 2026.
 
 ## How it works
 
