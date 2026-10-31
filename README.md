@@ -27,7 +27,7 @@ Measured results, with how each was measured, are in [docs/findings.md](docs/fin
 | Replay | Does re-running the curate job create duplicates? | No: 430,963 rows before and after two backfills, 0 duplicates. Reconciling counts also exposed a midnight edge case, now fixed. |
 | Freshness | What does the Firehose buffer cost in delay, and in file count? | The first file lands after almost exactly the buffer limit: 67 s at 60 s, 121 s at 120 s, 301 s at 300 s. Going from 300 s to 60 s gave 4.5× more files, each a quarter of the size. |
 
-Data: a 12-hour capture of 1.67 million events (847,303 rows after cleaning), 24–25 October 2026.
+Data: a 12-hour capture of 1.67 million events on 24–25 October 2026, of which 844,371 were kept after cleaning. With 2,936 rows from a 5-minute test on 21 October and 4 duplicates removed, `curated_edits` holds 847,303 rows.
 
 ## How it works
 
